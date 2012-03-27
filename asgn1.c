@@ -1,9 +1,8 @@
-
 /**
  * File: asgn1.c
  * Date: 13/03/2011
- * Author: Your Name 
- * Version: 0.1
+ * Author: Edward Hills 
+ * Version: 0.9
  *
  * This is a module which serves as a virtual ramdisk which disk size is
  * limited by the amount of memory available and serves as the requirement for
@@ -34,7 +33,7 @@
 #define MYIOC_TYPE 'k'
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Your Name");
+MODULE_AUTHOR("Edward Hills");
 MODULE_DESCRIPTION("COSC440 asgn1");
 
 
@@ -61,19 +60,29 @@ typedef struct asgn1_dev_t {
 
 asgn1_dev asgn1_device;
 
-
 int asgn1_major = 0;                      /* major number of module */  
 int asgn1_minor = 0;                      /* minor number of module */
 int asgn1_dev_count = 1;                  /* number of devices */
-
 
 /**
  * This function frees all memory pages held by the module.
  */
 void free_memory_pages(void) {
   page_node *curr;
+  page_node *node;
 
-  /* COMPLETE ME */
+    list_for_each_entry_safe(node, curr, asgn1_device->&mem_list, list) {
+        if (&node->page != NULL) {
+            kfree(&node->page);
+        }
+        list_del(&node->list);
+        kfree(node);
+    }
+
+    asgn1_device->num_pages = 0;
+//    asgn1_device->data_size = something;
+
+/* COMPLETE ME */
   /**
    * Loop through the entire page list {
    *   if (node has a page) {
