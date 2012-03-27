@@ -71,7 +71,7 @@ void free_memory_pages(void) {
   page_node *curr;
   page_node *node;
 
-    list_for_each_entry_safe(node, curr, asgn1_device->&mem_list, list) {
+    list_for_each_entry_safe(node, curr, &asgn1_device.mem_list, list) {
         if (&node->page != NULL) {
             kfree(&node->page);
         }
@@ -79,21 +79,8 @@ void free_memory_pages(void) {
         kfree(node);
     }
 
-    asgn1_device->num_pages = 0;
-//    asgn1_device->data_size = something;
-
-/* COMPLETE ME */
-  /**
-   * Loop through the entire page list {
-   *   if (node has a page) {
-   *     free the page
-   *   }
-   *   remove the node from the page list
-   *   free the node
-   * }
-   * reset device data size, and num_pages
-   */  
-
+    asgn1_device.num_pages = 0;
+    asgn1_device.data_size = 0;
 }
 
 
@@ -102,29 +89,29 @@ void free_memory_pages(void) {
  * mode, all memory pages will be freed.
  */
 int asgn1_open(struct inode *inode, struct file *filp) {
-  /* COMPLETE ME */
-  /**
-   * Increment process count, if exceeds max_nprocs, return -EBUSY
-   *
-   * if opened in write-only mode, free all memory pages
-   *
-   */
 
+    atomic_inc(&asgn1_device.nprocs);
+    if (atomic_read(&asgn1_device.nprocs) > atomic_read(&asgn1_device.max_nprocs)) {
+        printk(KERN_ERR "(exit): Too many processes are accessing this device\n");
+        return -EBUSY;
+    }
 
-  return 0; /* success */
+    if ((filp->f_flags & O_ACCMODE) == O_WRONLY) {
+        free_memory_pages();
+    }
+
+    return 0; /* success */
 }
 
 
-/**
+/*
  * This function releases the virtual disk, but nothing needs to be done
  * in this case. 
  */
 int asgn1_release (struct inode *inode, struct file *filp) {
-  /* COMPLETE ME */
-  /**
-   * decrement process count
-   */
-  return 0;
+   
+   atomic_dec(&asgn1_device.nprocs);
+   return 0;
 }
 
 
