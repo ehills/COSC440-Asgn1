@@ -11,7 +11,7 @@
  * Note: multiple devices and concurrent modules are not supported in this
  *       version.
  */
- 
+
 /* This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version
@@ -41,21 +41,21 @@ MODULE_DESCRIPTION("COSC440 asgn1");
  * The node structure for the memory page linked list.
  */ 
 typedef struct page_node_rec {
-  struct list_head list;
-  struct page *page;
+    struct list_head list;
+    struct page *page;
 } page_node;
 
 typedef struct asgn1_dev_t {
-  dev_t dev;            /* the device */
-  struct cdev *cdev;
-  struct list_head mem_list; 
-  int num_pages;        /* number of memory pages this module currently holds */
-  size_t data_size;     /* total data size in this module */
-  atomic_t nprocs;      /* number of processes accessing this device */ 
-  atomic_t max_nprocs;  /* max number of processes accessing this device */
-  struct kmem_cache *cache;      /* cache memory */
-  struct class *class;     /* the udev class */
-  struct device *device;   /* the udev device node */
+    dev_t dev;            /* the device */
+    struct cdev *cdev;
+    struct list_head mem_list; 
+    int num_pages;        /* number of memory pages this module currently holds */
+    size_t data_size;     /* total data size in this module */
+    atomic_t nprocs;      /* number of processes accessing this device */ 
+    atomic_t max_nprocs;  /* max number of processes accessing this device */
+    struct kmem_cache *cache;      /* cache memory */
+    struct class *class;     /* the udev class */
+    struct device *device;   /* the udev device node */
 } asgn1_dev;
 
 asgn1_dev asgn1_device;
@@ -68,8 +68,8 @@ int asgn1_dev_count = 1;                  /* number of devices */
  * This function frees all memory pages held by the module.
  */
 void free_memory_pages(void) {
-  page_node *curr;
-  page_node *node;
+    page_node *curr;
+    page_node *node;
 
     list_for_each_entry_safe(node, curr, &asgn1_device.mem_list, list) {
         if (&node->page != NULL) {
@@ -109,9 +109,9 @@ int asgn1_open(struct inode *inode, struct file *filp) {
  * in this case. 
  */
 int asgn1_release (struct inode *inode, struct file *filp) {
-   
-   atomic_dec(&asgn1_device.nprocs);
-   return 0;
+
+    atomic_dec(&asgn1_device.nprocs);
+    return 0;
 }
 
 
@@ -119,40 +119,69 @@ int asgn1_release (struct inode *inode, struct file *filp) {
  * This function reads contents of the virtual disk and writes to the user 
  */
 ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
-		 loff_t *f_pos) {
-  size_t size_read = 0;     /* size read from virtual disk in this function */
-  size_t begin_offset;      /* the offset from the beginning of a page to
-			       start reading */
-  int begin_page_no = *f_pos / PAGE_SIZE; /* the first page which contains
-					     the requested data */
-  int curr_page_no = 0;     /* the current page number */
-  size_t curr_size_read;    /* size read from the virtual disk in this round */
-  size_t size_to_be_read;   /* size to be read in the current round in 
-			       while loop */
+        loff_t *f_pos) {
+    size_t size_read = 0;     /* size read from virtual disk in this function */
+    size_t begin_offset;      /* the offset from the beginning of a page to
+                                 start reading */
+    int begin_page_no = *f_pos / PAGE_SIZE; /* the first page which contains
+                                               the requested data */
+    int curr_page_no = 0;     /* the current page number */
+    size_t curr_size_read;    /* size read from the virtual disk in this round */
+    size_t size_to_be_read;   /* size to be read in the current round in 
+                                 while loop */
 
-  struct list_head *ptr = asgn1_device.mem_list.next;
-  page_node *curr;
+    struct list_head *ptr = asgn1_device.mem_list.next;
+    page_node *curr;
 
-  /* COMPLETE ME */
-  /**
-   * check f_pos, if beyond data_size, return 0
-   * 
-   * Traverse the list, once the first requested page is reached,
-   *   - use copy_to_user to copy the data to the user-space buf page by page
-   *   - you also need to work out the start / end offset within a page
-   *   - Also needs to handle the situation where copy_to_user copy less
-   *       data than requested, and
-   *       copy_to_user should be called again to copy the rest of the
-   *       unprocessed data, and the second and subsequent calls still
-   *       need to check whether copy_to_user copies all data requested.
-   *       This is best done by a while / do-while loop.
-   *
-   * if end of data area of ramdisk reached before copying the requested
-   *   return the size copied to the user space so far
-   */
+    if (*f_pos > asgn1_device.data_size) {
+        //printk(KERN_ERR "File position %lg is greater than data size %lg currently allocated", (unsigned long)f_pos, (long)asgn1_device.data_size);
+        return 0;
+    }
 
-  return size_read;
+    begin_offset= *f_pos % PAGE_SIZE;
+    list_for_each_entry(curr, ptr, list) {
+        curr_page_no = page_to_pfn(curr->page);
+        if(begin_page_no <= curr_page_no) {
+
+            do {
+                size_to_be_read = PAGE_SIZE - begin_offset;
+                if (size_to_be_read > (count - size_read)) {
+                    size_to_be_read = count - size_read;
+                }
+                // not quite syntax to copy from offset of page
+                curr_size_read += copy_to_user(&buf[size_read],
+                                &(curr->page[begin_offset]),size_to_be_read); 
+                begin_offset+= curr_size_read;
+                size_read += curr_size_read;
+            } while (curr_size_read < size_to_be_read);
+            if (size_read == count) {
+                return 0;
+            }
+            begin_offset=0;
+        }
+    }
+
+    return size_read;
 }
+
+/* COMPLETE ME */
+/**
+ * check f_pos, if beyond data_size, return 0
+ * 
+ * Traverse the list, once the first requested page is reached,
+ *   - use copy_to_user to copy the data to the user-space buf page by page
+ *   - you also need to work out the start / end offset within a page
+ *   - Also needs to handle the situation where copy_to_user copy less
+ *       data than requested, and
+ *       copy_to_user should be called again to copy the rest of the
+ *       unprocessed data, and the second and subsequent calls still
+ *       need to check whether copy_to_user copies all data requested.
+ *       This is best done by a while / do-while loop.
+ *
+ * if end of data area of ramdisk reached before copying the requested
+ *   return the size copied to the user space so far
+ */
+
 
 
 
@@ -183,35 +212,35 @@ static loff_t asgn1_lseek (struct file *file, loff_t offset, int cmd)
  * module
  */
 ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
-		  loff_t *f_pos) {
-  size_t orig_f_pos = *f_pos;  /* the original file position */
-  size_t size_written = 0;  /* size written to virtual disk in this function */
-  size_t begin_offset;      /* the offset from the beginning of a page to
-			       start writing */
-  int begin_page_no = *f_pos / PAGE_SIZE;  /* the first page this finction
-					      should start writing to */
+        loff_t *f_pos) {
+    size_t orig_f_pos = *f_pos;  /* the original file position */
+    size_t size_written = 0;  /* size written to virtual disk in this function */
+    size_t begin_offset;      /* the offset from the beginning of a page to
+                                 start writing */
+    int begin_page_no = *f_pos / PAGE_SIZE;  /* the first page this finction
+                                                should start writing to */
 
-  int curr_page_no = 0;     /* the current page number */
-  size_t curr_size_written; /* size written to virtual disk in this round */
-  size_t size_to_be_written;  /* size to be read in the current round in 
-				 while loop */
-  
-  struct list_head *ptr = asgn1_device.mem_list.next;
-  page_node *curr;
+    int curr_page_no = 0;     /* the current page number */
+    size_t curr_size_written; /* size written to virtual disk in this round */
+    size_t size_to_be_written;  /* size to be read in the current round in 
+                                   while loop */
 
-  /* COMPLETE ME */
-  /**
-   * Traverse the list until the first page reached, and add nodes if necessary
-   *
-   * Then write the data page by page, remember to handle the situation
-   *   when copy_from_user() writes less than the amount you requested.
-   *   a while loop / do-while loop is recommended to handle this situation. 
-   */
+    struct list_head *ptr = asgn1_device.mem_list.next;
+    page_node *curr;
+
+    /* COMPLETE ME */
+    /**
+     * Traverse the list until the first page reached, and add nodes if necessary
+     *
+     * Then write the data page by page, remember to handle the situation
+     *   when copy_from_user() writes less than the amount you requested.
+     *   a while loop / do-while loop is recommended to handle this situation. 
+     */
 
 
-  asgn1_device.data_size = max(asgn1_device.data_size,
-                               orig_f_pos + size_written);
-  return size_written;
+    asgn1_device.data_size = max(asgn1_device.data_size,
+            orig_f_pos + size_written);
+    return size_written;
 }
 
 #define SET_NPROC_OP 1
@@ -221,20 +250,20 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
  * The ioctl function, which nothing needs to be done in this case.
  */
 long asgn1_ioctl (struct file *filp, unsigned cmd, unsigned long arg) {
-  int nr;
-  int new_nprocs;
-  int result;
+    int nr;
+    int new_nprocs;
+    int result;
 
-  /* COMPLETE ME */
-  /** 
-   * check whether cmd is for our device, if not for us, return -EINVAL 
-   *
-   * get command, and if command is SET_NPROC_OP, then get the data, and
+    /* COMPLETE ME */
+    /** 
+     * check whether cmd is for our device, if not for us, return -EINVAL 
+     *
+     * get command, and if command is SET_NPROC_OP, then get the data, and
      set max_nprocs accordingly, don't forget to check validity of the 
      value before setting max_nprocs
-   */
+     */
 
-  return -ENOTTY;
+    return -ENOTTY;
 }
 
 
@@ -243,16 +272,16 @@ long asgn1_ioctl (struct file *filp, unsigned cmd, unsigned long arg) {
  * which helps debugging.
  */
 int asgn1_read_procmem(char *buf, char **start, off_t offset, int count,
-		     int *eof, void *data) {
-  /* stub */
-  int result;
+        int *eof, void *data) {
+    /* stub */
+    int result;
 
-  /* COMPLETE ME */
-  /**
-   * use snprintf to print some info to buf, up to size count
-   * set eof
-   */
-  return result;
+    /* COMPLETE ME */
+    /**
+     * use snprintf to print some info to buf, up to size count
+     * set eof
+     */
+    return result;
 }
 
 
@@ -278,14 +307,14 @@ static int asgn1_mmap (struct file *filp, struct vm_area_struct *vma)
 
 
 struct file_operations asgn1_fops = {
-  .owner = THIS_MODULE,
-  .read = asgn1_read,
-  .write = asgn1_write,
-  .unlocked_ioctl = asgn1_ioctl,
-  .open = asgn1_open,
-  .mmap = asgn1_mmap,
-  .release = asgn1_release,
-  .llseek = asgn1_lseek
+    .owner = THIS_MODULE,
+    .read = asgn1_read,
+    .write = asgn1_write,
+    .unlocked_ioctl = asgn1_ioctl,
+    .open = asgn1_open,
+    .mmap = asgn1_mmap,
+    .release = asgn1_release,
+    .llseek = asgn1_lseek
 };
 
 
@@ -293,46 +322,46 @@ struct file_operations asgn1_fops = {
  * Initialise the module and create the master device
  */
 int __init asgn1_init_module(void){
-  int result; 
+    int result; 
 
-  /* COMPLETE ME */
-  /**
-   * set nprocs and max_nprocs of the device
-   *
-   * allocate major number
-   * allocate cdev, and set ops and owner field 
-   * add cdev
-   * initialize the page list
-   * create proc entries
-   */
- 
-  asgn1_device.class = class_create(THIS_MODULE, MYDEV_NAME);
-  if (IS_ERR(asgn1_device.class)) {
-    printk(KERN_WARNING "%s: can't create udev class\n", MYDEV_NAME);
-    result = -ENOMEM;
-    goto fail_class;
-  }
+    /* COMPLETE ME */
+    /**
+     * set nprocs and max_nprocs of the device
+     *
+     * allocate major number
+     * allocate cdev, and set ops and owner field 
+     * add cdev
+     * initialize the page list
+     * create proc entries
+     */
 
-  asgn1_device.device = device_create(asgn1_device.class, NULL, 
-                                      asgn1_device.dev, "%s", MYDEV_NAME);
-  if (IS_ERR(asgn1_device.device)) {
-    printk(KERN_WARNING "%s: can't create udev device\n", MYDEV_NAME);
-    result = -ENOMEM;
-    goto fail_device;
-  }
-  
-  printk(KERN_WARNING "set up udev entry\n");
-  printk(KERN_WARNING "Hello world from %s\n", MYDEV_NAME);
-  return 0;
+    asgn1_device.class = class_create(THIS_MODULE, MYDEV_NAME);
+    if (IS_ERR(asgn1_device.class)) {
+        printk(KERN_WARNING "%s: can't create udev class\n", MYDEV_NAME);
+        result = -ENOMEM;
+        goto fail_class;
+    }
 
-  /* cleanup code called when any of the initialization steps fail */
+    asgn1_device.device = device_create(asgn1_device.class, NULL, 
+            asgn1_device.dev, "%s", MYDEV_NAME);
+    if (IS_ERR(asgn1_device.device)) {
+        printk(KERN_WARNING "%s: can't create udev device\n", MYDEV_NAME);
+        result = -ENOMEM;
+        goto fail_device;
+    }
+
+    printk(KERN_WARNING "set up udev entry\n");
+    printk(KERN_WARNING "Hello world from %s\n", MYDEV_NAME);
+    return 0;
+
+    /* cleanup code called when any of the initialization steps fail */
 fail_device:
-   class_destroy(asgn1_device.class);
+    class_destroy(asgn1_device.class);
 
-  /* COMPLETE ME */
-  /* PLEASE PUT YOUR CLEANUP CODE HERE, IN REVERSE ORDER OF ALLOCATION */
+    /* COMPLETE ME */
+    /* PLEASE PUT YOUR CLEANUP CODE HERE, IN REVERSE ORDER OF ALLOCATION */
 
-  return result;
+    return result;
 }
 
 
@@ -340,16 +369,16 @@ fail_device:
  * Finalise the module
  */
 void __exit asgn1_exit_module(void){
-  device_destroy(asgn1_device.class, asgn1_device.dev);
-  class_destroy(asgn1_device.class);
-  printk(KERN_WARNING "cleaned up udev entry\n");
-  
-  /* COMPLETE ME */
-  /**
-   * free all pages in the page list 
-   * cleanup in reverse order
-   */
-  printk(KERN_WARNING "Good bye from %s\n", MYDEV_NAME);
+    device_destroy(asgn1_device.class, asgn1_device.dev);
+    class_destroy(asgn1_device.class);
+    printk(KERN_WARNING "cleaned up udev entry\n");
+
+    /* COMPLETE ME */
+    /**
+     * free all pages in the page list 
+     * cleanup in reverse order
+     */
+    printk(KERN_WARNING "Good bye from %s\n", MYDEV_NAME);
 }
 
 
