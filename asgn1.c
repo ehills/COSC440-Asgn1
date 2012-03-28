@@ -170,16 +170,15 @@ static loff_t asgn1_lseek (struct file *file, loff_t offset, int cmd)
 
     size_t buffer_size = asgn1_device.num_pages * PAGE_SIZE;
 
-    /* COMPLETE ME */
-    /**
-     * set testpos according to the command
-     *
-     * if testpos larger than buffer_size, set testpos to buffer_size
-     * 
-     * if testpos smaller than 0, set testpos to 0
-     *
-     * set file->f_pos to testpos
-     */
+    testpos = cmd;
+    
+    if (testpos > buffer_size) {
+        testpos = buffer_size;
+    } else if (testpos < 0) {
+        testpos = 0;
+    }
+    file->f_pos = testpos;
+
     printk (KERN_INFO "Seeking to pos=%ld\n", (long)testpos);
     return testpos;
 }
