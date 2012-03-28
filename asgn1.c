@@ -163,27 +163,6 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     return size_read;
 }
 
-/* COMPLETE ME */
-/**
- * check f_pos, if beyond data_size, return 0
- * 
- * Traverse the list, once the first requested page is reached,
- *   - use copy_to_user to copy the data to the user-space buf page by page
- *   - you also need to work out the start / end offset within a page
- *   - Also needs to handle the situation where copy_to_user copy less
- *       data than requested, and
- *       copy_to_user should be called again to copy the rest of the
- *       unprocessed data, and the second and subsequent calls still
- *       need to check whether copy_to_user copies all data requested.
- *       This is best done by a while / do-while loop.
- *
- * if end of data area of ramdisk reached before copying the requested
- *   return the size copied to the user space so far
- */
-
-
-
-
 
 static loff_t asgn1_lseek (struct file *file, loff_t offset, int cmd)
 {
