@@ -233,7 +233,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
         
         if ((curr->list.next == &asgn1_device.mem_list) && (count != size_written)) { // i need to add a page
             if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
-                printk(KERN_ERR "Sorry you have run out of memory");
+                printk(KERN_ERR "Not enough memory left\n");
                 return (count - size_written);
             }
             
@@ -263,11 +263,15 @@ long asgn1_ioctl (struct file *filp, unsigned cmd, unsigned long arg) {
     int new_nprocs;
     int result;
 
-    /* COMPLETE ME */
-    /** 
-     * check whether cmd is for our device, if not for us, return -EINVAL 
-     *
-     * get command, and if command is SET_NPROC_OP, then get the data, and
+    if (_IOC_TYPE(cmd) != MYIOC_TYPE) {
+
+        printk(KERN_WARNING "Invalid comand CMD=%d, for this type.\n", cmd);
+
+        return -EINVAL;
+
+    }
+    
+     /* get command, and if command is SET_NPROC_OP, then get the data, and
      set max_nprocs accordingly, don't forget to check validity of the 
      value before setting max_nprocs
      */
