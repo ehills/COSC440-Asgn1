@@ -134,7 +134,6 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     page_node *curr;
 
     if (*f_pos > asgn1_device.data_size) {
-        //printk(KERN_ERR "File position %lg is greater than data size %lg currently allocated", (unsigned long)f_pos, (long)asgn1_device.data_size);
         return 0;
     }
 
