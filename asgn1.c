@@ -205,19 +205,51 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
     struct list_head *ptr = asgn1_device.mem_list.next;
     page_node *curr;
 
-    /* COMPLETE ME */
-    /**
-     * Traverse the list until the first page reached, and add nodes if necessary
-     *
-     * Then write the data page by page, remember to handle the situation
-     *   when copy_from_user() writes less than the amount you requested.
-     *   a while loop / do-while loop is recommended to handle this situation. 
-     */
+    // if there is no page there at all
+    if (orig_f_pos > asgn1_device.data_size) {
+        return 0;
+    }
 
+    list_for_each_entry(curr, ptr, list) {
+
+        curr_page_no = page_to_pfn(curr->page);
+        if (begin_page_no == curr_page_no) {
+            begin_offset = orig_f_pos % PAGE_SIZE;
+        }
+    }
+
+    while (size_written != count) {
+        
+        do {
+            size_to_be_written = PAGE_SIZE - begin_offset;
+            if (size_to_be_written > (count - size_written)) {
+                size_to_be_written = (count - size_written);
+            }
+            curr_size_written += copy_from_user(page_address(curr->page) + begin_offset, &buf[size_written], size_to_be_written);
+            begin_offset += curr_size_written;
+            size_written += curr_size_written;
+        } while (size_written > curr_size_written);
+        begin_offset = 0;
+        
+        if ((curr->list.next == &asgn1_device.mem_list) && (count != size_written)) { // i need to add a page
+            if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
+                printk(KERN_ERR "Sorry you have run out of memory");
+                return (count - size_written);
+            }
+            
+            if ((curr->page = alloc_page(GFP_KERNEL)) == NULL) {
+                printk(KERN_WARNING "Not enough memory left\n");
+                asgn1_device.data_size+= size_written;
+                return (count - size_written);
+            }
+            list_add_tail(&(curr->list), &asgn1_device.mem_list);
+            asgn1_device.num_pages++;
+        }
+    }
 
     asgn1_device.data_size = max(asgn1_device.data_size,
             orig_f_pos + size_written);
-    return size_written;
+    return 0;
 }
 
 #define SET_NPROC_OP 1
