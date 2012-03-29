@@ -258,7 +258,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
 /**
  * The ioctl function, which nothing needs to be done in this case.
  */
-long asgn1_ioctl (struct file *filp, unsigned cmd, unsigned long arg) {
+long asgn1_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
     int nr;
     int new_nprocs;
     int result;
@@ -271,11 +271,21 @@ long asgn1_ioctl (struct file *filp, unsigned cmd, unsigned long arg) {
 
     }
     
-     /* get command, and if command is SET_NPROC_OP, then get the data, and
-     set max_nprocs accordingly, don't forget to check validity of the 
-     value before setting max_nprocs
-     */
-
+     if (cmd == SET_NPROC_OP) {
+         // TODO WRONG, VERY WRONG
+        new_nprocs = (int) &arg;
+        if (new_nprocs > atomic_read(&asgn1_device.max_nprocs)) {
+            atomic_set(&asgn1_device.max_nprocs, new_nprocs);
+        } else {
+            if (atomic_read(&asgn1_device.nprocs) > new_nprocs) {
+                printk(KERN_ERR "Cannot set maximum number of processes to %d because too many processes are currently accessing this device.\n", new_nprocs);
+                return -EINVAL;
+            }
+            atomic_set(&asgn1_device.max_nprocs, new_nprocs);
+        }
+        return 0;
+     }
+     
     return -ENOTTY;
 }
 
@@ -397,5 +407,4 @@ void __exit asgn1_exit_module(void){
 
 module_init(asgn1_init_module);
 module_exit(asgn1_exit_module);
-
 
