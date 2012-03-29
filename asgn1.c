@@ -316,7 +316,42 @@ static int asgn1_mmap (struct file *filp, struct vm_area_struct *vma)
     unsigned long ramdisk_size = asgn1_device.num_pages * PAGE_SIZE;
     page_node *curr;
     unsigned long index = 0;
+    struct list_head *ptr = asgn1_device.mem_list.next;
 
+    if (offset % PAGE_SIZE != 0 || offset > ramdisk_size) {
+        printk(KERN_ERR "Offset must be on valid page boundary.");
+        return -EAGAIN;
+    } else if (len % PAGE_SIZE != 0) {
+        printk(KERN_ERR "Length must be on a multiple of page_size.");
+        return -EAGAIN;
+    }
+
+    // so we know that the offset is on the page boundary and not beyond my size
+    // we also know that the length is the size of the page size
+    // although if start == 0 then we can tell remap to start wherever
+
+//TODO ALSO VERY VERY WRONG
+
+   list_for_each_entry(curr, ptr, list) {
+       pfn = page_to_pfn(curr->page);
+        if (pfn >= virt_to_pfn(offset)) {
+            if (remap_pfn_range(vma, vma->vm_start + index, pfn, PAGE_SIZE, vma->vm_page_prot)) {
+                return -EAGAIN;
+            }
+            len -= PAGE_SIZE;
+            index+=PAGE_SIZE;
+            if (len <= 1) {
+                return 0;
+            }
+        }
+   }
+   
+   // so now get the page number for where we should start
+   // loop through every page till we find where we should start 
+        // add the page with remap
+        // make length = length - page_size
+    // move on to the next page
+    
     /* COMPLETE ME */
     /**
      * check offset and len
