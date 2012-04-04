@@ -297,7 +297,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
         curr_size_written = 0;
         do {
             if (write_count > 10) {
-                printk(KERN_INFO "I wrote: %d bytes our of %d and still didnt finish", (int)curr_size_written, (int)count);
+                printk(KERN_INFO "I wrote: %d bytes our of %d and still didnt finish", (int) size_to_be_written - (int)curr_size_written, (int)count);
             } // DEBUG
 
             size_to_be_written = PAGE_SIZE - begin_offset;
@@ -306,11 +306,11 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
             }
             printk(KERN_INFO "Bytes to write: %d bytes\n", (int)size_to_be_written);
             curr_size_written += copy_from_user(page_address(curr->page) + begin_offset, buf + size_written, size_to_be_written);
-            begin_offset += curr_size_written;
-            size_written += curr_size_written;
-            printk(KERN_INFO "I wrote: %d bytes\nOffset is now: %d\nTotal size written is: %d\n", (int)curr_size_written, (int)begin_offset, (int)size_written);
+            begin_offset += size_to_be_written - curr_size_written;
+            size_written += size_to_be_written - curr_size_written;
+            printk(KERN_INFO "I wrote: %d bytes\nOffset is now: %d\nTotal size written is: %d\n", (int)size_to_be_written - (int)curr_size_written, (int)begin_offset, (int)size_written);
             write_count++; // DEBUG
-        } while (size_to_be_written > curr_size_written);
+        } while (size_to_be_written > size_to_be_written - curr_size_written);
         begin_offset = 0;
 
         if ((curr->list.next == &asgn1_device.mem_list) && (count != size_written)) { // i need to add a page
