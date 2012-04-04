@@ -137,8 +137,6 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     size_t size_to_be_read;   /* size to be read in the current round in 
                                  while loop */
 
-    char *eds_buf = "Hello this is eds buffer char star.";
-
     struct list_head *ptr = asgn1_device.mem_list.next;
     page_node *curr;
 
@@ -150,25 +148,25 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     printk(KERN_INFO "I'm Reading :)");
 
     begin_offset= *f_pos % PAGE_SIZE;
+    printk(KERN_INFO "orig begin offset is: %d\n",(int)begin_offset);
     list_for_each_entry(curr, ptr, list) {
         curr_page_no = page_to_pfn(curr->page);
         if(begin_page_no <= curr_page_no) {
             curr_size_read = 0;
+            printk(KERN_INFO "My current page number: %d\n",(int)curr_page_no);
 
             do {
                 size_to_be_read = PAGE_SIZE - begin_offset;
                 if (size_to_be_read > (count - size_read)) {
                     size_to_be_read = count - size_read;
                 }
-                printk(KERN_INFO "I should be reading %d bytes\n", (int)size_to_be_read);
-                //curr_size_read += copy_to_user(buf + size_read,
-                //        page_address(curr->page) + begin_offset,size_to_be_read); 
+                printk(KERN_INFO "I should be reading %d bytes\nOut of %d bytes", (int)size_to_be_read, (int)count);
                 curr_size_read += copy_to_user(buf + size_read,
-                        eds_buf + begin_offset,size_to_be_read); 
-                printk(KERN_INFO "I did read %d bytes\n", (int)curr_size_read);
-                begin_offset+= curr_size_read;
-                size_read += curr_size_read;
-            } while (curr_size_read < size_to_be_read);
+                        page_address(curr->page) + begin_offset, size_to_be_read); 
+                printk(KERN_INFO "I have NOT read %d bytes\n", (int)curr_size_read);
+                begin_offset += size_to_be_read - curr_size_read;
+                size_read += size_to_be_read - curr_size_read;
+            } while (size_to_be_read > size_to_be_read - curr_size_read);
             if (size_read == count) {
                 return 0;
             }
@@ -236,18 +234,12 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
     struct list_head *ptr = asgn1_device.mem_list.next;
     page_node *curr;
 
-    int counter = 0; // DEBUG 
-    int write_count = 0; // DEBUG 
-
     // if there is no page there at all
     
     if (orig_f_pos > asgn1_device.data_size) {
         printk(KERN_WARNING "Reached end of the device on a read");
         return 0;
     }
-
-    // TODO MAKE THIS BETTER
-    // better start is to simply make curr = page_address((orig_fpos % PAGE_SIZE) - PAGE_SIZE)
 
     // lets check if its empty and if it is get a new page
     if (list_empty(ptr)) {
@@ -272,33 +264,19 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
     } else {
         list_for_each_entry(curr, ptr, list) {
 
-            if (counter > 2) {
-                printk(KERN_ERR "Ive looped more than twice...");
-                return -1;
-            } // DEBUG
-
             curr_page_no = page_to_pfn(curr->page);
             if (begin_page_no == curr_page_no) {
                 begin_offset = orig_f_pos % PAGE_SIZE;
-                counter++; // DEBUG
                 break;
             }
         }
 
     }
     while (size_written != count) {
-        if (counter > 2) { 
-            printk(KERN_INFO "Ive looped MORE than twice and im scared\n");
-            return -1;
-        } // DEBUG
-
         printk(KERN_INFO "I've written %d bytes out of %d\n", (int)size_written, (int)count);
 
         curr_size_written = 0;
         do {
-            if (write_count > 10) {
-                printk(KERN_INFO "I wrote: %d bytes our of %d and still didnt finish", (int) size_to_be_written - (int)curr_size_written, (int)count);
-            } // DEBUG
 
             size_to_be_written = PAGE_SIZE - begin_offset;
             if (size_to_be_written > (count - size_written)) {
@@ -309,7 +287,6 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
             begin_offset += size_to_be_written - curr_size_written;
             size_written += size_to_be_written - curr_size_written;
             printk(KERN_INFO "I wrote: %d bytes\nOffset is now: %d\nTotal size written is: %d\n", (int)size_to_be_written - (int)curr_size_written, (int)begin_offset, (int)size_written);
-            write_count++; // DEBUG
         } while (size_to_be_written > size_to_be_written - curr_size_written);
         begin_offset = 0;
 
@@ -326,54 +303,8 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
             }
             list_add_tail(&(curr->list), ptr);
             asgn1_device.num_pages++;
-            counter++; // DEBUG
         }
     }
-
-
-/*                      OLD WAY OF DOING IT 
-*
-    list_for_each_entry(curr, ptr, list) {
-        printk(KERN_INFO "I'm Writing 3");
-
-        curr_page_no = page_to_pfn(curr->page);
-        if (begin_page_no == curr_page_no) {
-            begin_offset = orig_f_pos % PAGE_SIZE;
-            break;
-        }
-    }
-
-    while (size_written != count) {
-        printk(KERN_INFO "I've written %d bytes out of %d\n", size_written, count);
-
-        do {
-            size_to_be_written = PAGE_SIZE - begin_offset;
-            if (size_to_be_written > (count - size_written)) {
-                size_to_be_written = (count - size_written);
-            }
-            printk(KERN_INFO "So now lets write %d bytes\n", size_to_be_written);
-            curr_size_written += copy_from_user(page_address(curr->page) + begin_offset, buf + size_written, size_to_be_written);
-            begin_offset += curr_size_written;
-            size_written += curr_size_written;
-        } while (size_written > curr_size_written);
-        begin_offset = 0;
-
-        if ((curr->list.next == &asgn1_device.mem_list) && (count != size_written)) { // i need to add a page
-            if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
-                printk(KERN_ERR "Not enough memory left\n");
-                return -ENOMEM;
-            }
-
-            if ((curr->page = alloc_page(GFP_KERNEL)) == NULL) {
-                printk(KERN_WARNING "Not enough memory left\n");
-                asgn1_device.data_size+= size_written;
-                return -ENOMEM;
-            }
-            list_add_tail(&(curr->list), ptr);
-            asgn1_device.num_pages++;
-        }
-    }
-    */
 
     asgn1_device.data_size = max(asgn1_device.data_size,
             orig_f_pos + size_written);
