@@ -28,6 +28,7 @@
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
 #include <linux/device.h>
+#include <asm/page.h>
 
 #define MYDEV_NAME "asgn1"
 #define MYIOC_TYPE 'k'
@@ -239,17 +240,17 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
             return -ENOMEM;
         }
         list_add_tail(&(curr->list), &(asgn1_device.mem_list));
-       // curr_page_no = page_to_pfn(curr->page);
-       // begin_page_no = curr_page_no;
+        curr_page_no = page_to_pfn(curr->page);
+        begin_page_no = curr_page_no;
         asgn1_device.num_pages++;
-       // ptr = asgn1_device.mem_list.prev;
+        ptr = asgn1_device.mem_list.prev;
+        asgn1_device.data_size += PAGE_SIZE;
     }
 
     size_to_be_written = count;
     printk(KERN_INFO "Going to write %d bytes", (int)size_to_be_written);
-    printk(KERN_INFO "Writing to address %p", page_address(curr->page));
-//    size_written = copy_from_user(page_address(curr->page), 
- //                                   buf + size_written, size_to_be_written);
+    size_written = copy_from_user(page_address(curr->page), 
+                                    buf + size_written, size_to_be_written);
     printk(KERN_INFO "I DID NOT write %d bytes", (int)size_written);
     
     return count - size_to_be_written; 
@@ -349,7 +350,7 @@ int asgn1_read_procmem(char *buf, char **start, off_t offset, int count,
 
     // need to write count + 1 bytes because need extra 1 for nul
     result = snprintf(buf + offset, count + 1, "Reading from /proc/%s\n", MYDEV_NAME);  
-    result += snprintf((buf + offset + result), count + 1, "I have e.g 5 pages\n", MYDEV_NAME);  
+    result += snprintf(buf + offset + result, count + 1, "I have e.g 5 pages\n", MYDEV_NAME);  
 
     if (result <= offset + count) {
         *eof = 1;
@@ -396,8 +397,7 @@ static int asgn1_mmap (struct file *filp, struct vm_area_struct *vma)
 
             if (page_to_pfn(curr->page) == pfn) {
 
-                remap_pfn_range(vma, vma->vm_start + offset,
-                                pfn + (PAGE_SIZE * index), len, vma->vm_page_prot);
+                remap_pfn_range(vma, vma->vm_start + offset, pfn + (PAGE_SIZE * index), len, vma->vm_page_prot);
                 index++;
                 len -= PAGE_SIZE;
                 offset += PAGE_SIZE;
