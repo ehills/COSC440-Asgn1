@@ -147,7 +147,8 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     begin_offset = *f_pos % PAGE_SIZE;
     list_for_each_entry(curr, ptr, list) {
         curr_page_no = page_to_pfn(curr->page);
-        if (begin_page_no == curr_page_no) {
+        printk(KERN_ERR "being page: %d\ncurr_page: %d\n", begin_page_no, curr_page_no);
+        if (begin_page_no <= curr_page_no) {
             do {
                 size_to_be_read = min((PAGE_SIZE - begin_offset),
                                                     (count - size_read));
@@ -157,6 +158,7 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
                 size_read += curr_size_read;
                 size_to_be_read -= curr_size_read;
                 begin_offset += curr_size_read;
+        break;
             } while(size_read < count);
             begin_offset = 0;
         }
@@ -226,7 +228,8 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
         return 0;
     }
 
-    if (ptr == &(asgn1_device.mem_list)) {
+//    if (ptr == &(asgn1_device.mem_list)) { // not needed because when opened
+//                                           // for write it will clear ALL pages   
         printk(KERN_INFO "The page list is empty so will add a new page now.");
         if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
             printk(KERN_ERR "Not enough memory left\n");
@@ -238,11 +241,12 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
             return -ENOMEM;
         }
         list_add_tail(&(curr->list), &(asgn1_device.mem_list));
-       // curr_page_no = page_to_pfn(curr->page);
-       // begin_page_no = curr_page_no;
+        curr_page_no = page_to_pfn(curr->page);
+        begin_page_no = curr_page_no;
+        printk(KERN_INFO "page no is: %d", begin_page_no);
         asgn1_device.num_pages++;
-       // ptr = asgn1_device.mem_list.prev;
-    }
+        ptr = asgn1_device.mem_list.prev;
+  //  }
 
     size_to_be_written = count;
     printk(KERN_INFO "Going to write %d bytes", (int)size_to_be_written);
@@ -471,6 +475,8 @@ int __init asgn1_init_module(void){
     // init cdev
     cdev_init(asgn1_device.cdev, &asgn1_fops);
 
+    asgn1_device.cdev->owner = THIS_MODULE;
+
     // add cdev
     if (cdev_add(asgn1_device.cdev, asgn1_device.dev, asgn1_dev_count) < 0) {
         printk(KERN_ERR "cdev_add() failed.\n");
@@ -480,7 +486,6 @@ int __init asgn1_init_module(void){
     }
 
     // initiliase page list
-
     INIT_LIST_HEAD(&(asgn1_device.mem_list));
     
     if (create_proc_read_entry(MYDEV_NAME, S_IRUSR | S_IRGRP | S_IROTH, NULL, asgn1_read_procmem, NULL) == NULL) {
