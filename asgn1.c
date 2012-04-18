@@ -136,7 +136,7 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     size_t size_to_be_read;   /* size to be read in the current round in 
                                  while loop */
 
-    struct list_head *ptr = asgn1_device.mem_list.next;
+    struct list_head *ptr = &asgn1_device.mem_list;
     page_node *curr;
 
     if (*f_pos > asgn1_device.data_size) {
@@ -146,21 +146,23 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
         
     begin_offset = *f_pos % PAGE_SIZE;
     list_for_each_entry(curr, ptr, list) {
-        curr_page_no = page_to_pfn(curr->page);
-        printk(KERN_ERR "being page: %d\ncurr_page: %d\n", begin_page_no, curr_page_no);
         if (begin_page_no <= curr_page_no) {
             do {
-                size_to_be_read = min((PAGE_SIZE - begin_offset),
-                                                    (count - size_read));
-                printk(KERN_INFO "Going to read %d", (int)size_to_be_read);
+                if (count >= asgn1_device.data_size) { 
+                    size_to_be_read = min((PAGE_SIZE - begin_offset), (count - size_read));
+                } else {
+                    size_to_be_read = asgn1_device.data_size;
+                }
                 curr_size_read = size_to_be_read - copy_to_user(buf + size_read, page_address(curr->page) + begin_offset, size_to_be_read);
-                printk(KERN_INFO "I read %d bytes\nfrom %p\nwithout offset was %p", (int)curr_size_read, page_address(curr->page) + begin_offset, page_address(curr->page));
                 size_read += curr_size_read;
                 size_to_be_read -= curr_size_read;
                 begin_offset += curr_size_read;
-        break;
-            } while(size_read < count);
+            } while(size_read < size_to_be_read);
             begin_offset = 0;
+            curr_page_no++;
+            if (size_read == count) {
+                return size_read;
+            }
         }
     }
     return size_read;
@@ -230,20 +232,20 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
 
 //    if (ptr == &(asgn1_device.mem_list)) { // not needed because when opened
 //                                           // for write it will clear ALL pages   
+        curr_page_no = begin_page_no;
         printk(KERN_INFO "The page list is empty so will add a new page now.");
         if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
             printk(KERN_ERR "Not enough memory left\n");
             return -ENOMEM;
         }
-
+        
         if ((curr->page = alloc_page(GFP_KERNEL)) == NULL) {
             printk(KERN_WARNING "Not enough memory left\n");
             return -ENOMEM;
         }
+        INIT_LIST_HEAD(&(curr->list));
         list_add_tail(&(curr->list), &(asgn1_device.mem_list));
-        curr_page_no = page_to_pfn(curr->page);
-        begin_page_no = curr_page_no;
-        printk(KERN_INFO "page no is: %d", begin_page_no);
+        curr_page_no++;
         asgn1_device.num_pages++;
         ptr = asgn1_device.mem_list.prev;
   //  }
