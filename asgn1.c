@@ -146,12 +146,12 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
         
     begin_offset = *f_pos % PAGE_SIZE;
     list_for_each_entry(curr, ptr, list) {
+
        
         if (begin_page_no <= curr_page_no) {
             do {
                 if (count <= asgn1_device.data_size) { 
                     size_to_be_read = min(((int)PAGE_SIZE - begin_offset), (count - size_read));
-                    printk(KERN_INFO "size_to_be_read %d", (int)size_to_be_read);
                 } else {
                     count = asgn1_device.data_size;
                     size_to_be_read = min(((int)PAGE_SIZE - begin_offset), (count - size_read));
@@ -162,13 +162,16 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
                 size_to_be_read -= curr_size_read;
                 begin_offset += curr_size_read;
             } while(size_to_be_read > 0);
+            if (size_read == count) {
+                printk(KERN_INFO "Read %d bytes\n", size_read);
+                return 0; // TODO - successfully reads everything correctly but wont print to stdout.
+                          // TODO - if i return size_read instead it then infinitely prints out the
+                          // TODO - text to stdout because cat is repetitively calling read because I
+                          // TODO - have returned non-zero so thinks it needs to read more
+                          // TODO - why does it print nothing when I return 0?
+            }
             begin_offset = 0;
             curr_page_no++;
-            printk(KERN_INFO "size_read = %d", size_read);
-            if (size_read == count) {
-                printk(KERN_INFO "size_read = %d", size_read);
-                return 0; 
-            }
         }
     }
     return size_read;
@@ -236,14 +239,13 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
     }
 
     if (ptr == ptr->next) {
-        printk(KERN_INFO "The page list is empty so will add a new page now.");
         if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
             printk(KERN_ERR "Not enough memory left\n");
             return -ENOMEM;
         }
         
         if ((curr->page = alloc_page(GFP_KERNEL)) == NULL) {
-            printk(KERN_WARNING "Not enough memory left\n");
+            printk(KERN_ERR "Not enough memory left\n");
             return -ENOMEM;
         }
         INIT_LIST_HEAD(&(curr->list));
@@ -252,15 +254,12 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
         asgn1_device.num_pages++;
     }
 
-    printk(KERN_INFO "Count is: %d\n", (int)count);
     list_for_each_entry(curr, ptr, list) {
         
         if (begin_page_no <= curr_page_no) {
             begin_offset = 0;
 
             while (size_written < count) {
-
-
                 do {
                     
                     size_to_be_written = min(((int)PAGE_SIZE - begin_offset),
@@ -268,15 +267,13 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
                     curr_size_written = size_to_be_written - 
                             copy_from_user(page_address(curr->page) + begin_offset, 
                                             buf + size_written, size_to_be_written);
-                    printk(KERN_INFO "Size just wrote: %d\n", (int)curr_size_written);
                     size_written += curr_size_written;
                     size_to_be_written -= curr_size_written;
                     begin_offset += curr_size_written;
-                    printk(KERN_INFO "Total size written: %d\n", (int)size_written);
+                    asgn1_device.data_size += curr_size_written;
 
                 } while (size_to_be_written > 0);
                 begin_offset = 0;
-                asgn1_device.data_size += size_written;
 
                 if (size_written < count) {
                     if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
@@ -285,16 +282,15 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
                     }
 
                     if ((curr->page = alloc_page(GFP_KERNEL)) == NULL) {
-                        printk(KERN_WARNING "Not enough memory left\n");
+                        printk(KERN_ERR "Not enough memory left\n");
                         return -ENOMEM;
                     }
                     INIT_LIST_HEAD(&(curr->list));
                     list_add_tail(&(curr->list), &(asgn1_device.mem_list));
                     curr_page_no++;
                     asgn1_device.num_pages++;
-                    printk(KERN_INFO "Added new page. Now have %d pages\n", asgn1_device.num_pages);
                 } else {
-                    printk(KERN_ERR "By the end i have wrote %d", (int)size_written);
+                    printk(KERN_INFO "Wrote %d bytes\n", (int)size_written);
                     return count;
                 }
             }
@@ -303,7 +299,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
     *f_pos += size_written;
     asgn1_device.data_size = max(asgn1_device.data_size,
             orig_f_pos + size_written);
-    printk(KERN_ERR "I wrote %d", (int)size_written);
+    printk(KERN_ERR "Wrote %d bytes\n", (int)size_written);
     return 0;
 } 
 
