@@ -139,6 +139,7 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     struct list_head *ptr = &asgn1_device.mem_list;
     page_node *curr;
 
+    // check they didnt tell me to start past my data
     if (*f_pos > asgn1_device.data_size) {
         printk(KERN_ERR "Reached end of the device on a read");
         return -EFAULT;
@@ -146,23 +147,26 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
         
     begin_offset = *f_pos % PAGE_SIZE;
     list_for_each_entry(curr, ptr, list) {
-
        
         if (begin_page_no <= curr_page_no) {
-            do {
+            do { // read data from the page 
+
+                // check if i need to read a whole page or less than a page
                 if (count <= asgn1_device.data_size) { 
                     size_to_be_read = min(((int)PAGE_SIZE - begin_offset), (count - size_read));
+                // looks like they told me to read more than i have, better change that.
                 } else {
                     count = asgn1_device.data_size;
                     size_to_be_read = min(((int)PAGE_SIZE - begin_offset), (count - size_read));
                 }
+                // now lets read!
                 curr_size_read = size_to_be_read - copy_to_user(buf + size_read,
                                     page_address(curr->page) + begin_offset, size_to_be_read);
                 size_read += curr_size_read;
                 size_to_be_read -= curr_size_read;
                 begin_offset += curr_size_read;
             } while(size_to_be_read > 0);
-            if (size_read == count) {
+            if (size_read == count) { // then im done!
                 printk(KERN_INFO "Read %d bytes\n", size_read);
                 return 0; // TODO - successfully reads everything correctly but wont print to stdout.
                           // TODO - if i return size_read instead it then infinitely prints out the
@@ -187,6 +191,7 @@ static loff_t asgn1_lseek (struct file *file, loff_t offset, int cmd)
 
     size_t buffer_size = asgn1_device.num_pages * PAGE_SIZE;
 
+    // depending on where im to seek from start there
     switch(cmd) {
         case SEEK_SET:
             testpos = offset;
@@ -233,11 +238,13 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
     struct list_head *ptr = &asgn1_device.mem_list;
     page_node *curr;
 
+    // check they didnt tell me to start where i dont have
     if (orig_f_pos > asgn1_device.data_size) {
-        printk(KERN_WARNING "Reached end of the device on a read");
+        printk(KERN_WARNING "Reached end of the device on a write");
         return 0;
     }
 
+    // better add a page if there are none!
     if (ptr == ptr->next) {
         if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
             printk(KERN_ERR "Not enough memory left\n");
@@ -260,7 +267,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
             begin_offset = 0;
 
             while (size_written < count) {
-                do {
+                do { // write to the page till its full or we've finished writing
                     
                     size_to_be_written = min(((int)PAGE_SIZE - begin_offset),
                                                         (count - size_written));
@@ -275,6 +282,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
                 } while (size_to_be_written > 0);
                 begin_offset = 0;
 
+                // if still left to write better add a new page
                 if (size_written < count) {
                     if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
                         printk(KERN_ERR "Not enough memory left\n");
@@ -289,18 +297,19 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
                     list_add_tail(&(curr->list), &(asgn1_device.mem_list));
                     curr_page_no++;
                     asgn1_device.num_pages++;
-                } else {
+                } else { // im finished!
                     printk(KERN_INFO "Wrote %d bytes\n", (int)size_written);
                     return count;
                 }
             }
         }
     }
+    // made data_size = whatever I wrote
     *f_pos += size_written;
     asgn1_device.data_size = max(asgn1_device.data_size,
             orig_f_pos + size_written);
     printk(KERN_ERR "Wrote %d bytes\n", (int)size_written);
-    return 0;
+    return size_written;
 } 
 
 #define SET_NPROC_OP 1
@@ -314,11 +323,13 @@ long asgn1_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
     int new_nprocs;
     int result;
 
+    // check that the command is actually for my type of device
     if (_IOC_TYPE(cmd) != MYIOC_TYPE) {
         printk(KERN_WARNING "Invalid comand CMD=%d, for this type.\n", cmd);
         return -EINVAL;
     }
 
+    // now check that command is actually for me, if it is set max_nprocs
     // TODO find out why its not TEM_SET_NPROC
     if (cmd == SET_NPROC_OP) {
         nr = (int)arg;
@@ -344,7 +355,6 @@ long asgn1_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
  */
 int asgn1_read_procmem(char *buf, char **start, off_t offset, int count,
         int *eof, void *data) {
-    /* stub */
     int result;
 
     // need to write count + 1 bytes because need extra 1 for nul
@@ -471,7 +481,6 @@ int __init asgn1_init_module(void){
     
     // init cdev
     cdev_init(asgn1_device.cdev, &asgn1_fops);
-
     asgn1_device.cdev->owner = THIS_MODULE;
 
     // add cdev
@@ -533,9 +542,9 @@ fail_device:
 void __exit asgn1_exit_module(void){
     device_destroy(asgn1_device.class, asgn1_device.dev);
     class_destroy(asgn1_device.class);
-    printk(KERN_WARNING "cleaned up udev entry\n");
-
     remove_proc_entry(MYDEV_NAME, NULL);
+    printk(KERN_WARNING "cleaned up udev entry\n");
+   
     free_memory_pages();
     list_del_init(&asgn1_device.mem_list);
     cdev_del(asgn1_device.cdev);
