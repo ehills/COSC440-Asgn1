@@ -148,20 +148,28 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     list_for_each_entry(curr, ptr, list) {
         if (begin_page_no <= curr_page_no) {
             do {
-                if (count >= asgn1_device.data_size) { 
+                if (count <= asgn1_device.data_size) { 
                     size_to_be_read = min((PAGE_SIZE - begin_offset), (count - size_read));
                 } else {
-                    size_to_be_read = asgn1_device.data_size;
+                    count = asgn1_device.data_size;
+                    size_to_be_read = min((PAGE_SIZE - begin_offset), (count - size_read));
                 }
-                curr_size_read = size_to_be_read - copy_to_user(buf + size_read, page_address(curr->page) + begin_offset, size_to_be_read);
+                printk(KERN_INFO "Size to be read: %d", (int)size_to_be_read); 
+                curr_size_read = size_to_be_read - copy_to_user(buf + size_read,
+                                    page_address(curr->page) + begin_offset, size_to_be_read);
+                printk(KERN_INFO "Curr_Size_read: %d", (int)curr_size_read); 
                 size_read += curr_size_read;
+                printk(KERN_INFO "Total_Size_read: %d", (int)size_read); 
                 size_to_be_read -= curr_size_read;
+                printk(KERN_INFO "Size to be read next time: %d", (int)size_to_be_read); 
                 begin_offset += curr_size_read;
-            } while(size_read < size_to_be_read);
+                printk(KERN_INFO "Count: %d", (int)count); 
+            } while(size_to_be_read > 0);
+            printk(KERN_INFO "Made it out!"); 
             begin_offset = 0;
             curr_page_no++;
             if (size_read == count) {
-                return size_read;
+                size_read = 0;
             }
         }
     }
@@ -512,7 +520,6 @@ int __init asgn1_init_module(void){
         result = -ENOMEM;
         goto fail_device;
     }
-
 
     printk(KERN_WARNING "set up udev entry\n");
     printk(KERN_WARNING "Hello world from %s\n", MYDEV_NAME);
