@@ -159,22 +159,24 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
                     count = asgn1_device.data_size;
                     size_to_be_read = min(((int)PAGE_SIZE - begin_offset), (count - size_read));
                 }
+                printk(KERN_ERR "Going to read %d out of %d", (int)size_to_be_read, (int)count);
                 // now lets read!
                 curr_size_read = size_to_be_read - copy_to_user(buf + size_read,
                                     page_address(curr->page) + begin_offset, size_to_be_read);
+                printk(KERN_ERR "Just read %d out of %d", (int)curr_size_read, (int)size_to_be_read);
                 size_read += curr_size_read;
                 size_to_be_read -= curr_size_read;
                 begin_offset += curr_size_read;
             } while(size_to_be_read > 0);
+            begin_offset = 0;
             if (size_read == count) { // then im done!
                 break;
             }
-            begin_offset = 0;
         }
         curr_page_no++;
     }
     printk(KERN_INFO "Read %d bytes\n", (int)size_read);
-    *f_pos += size_read;
+    //*f_pos += size_read;
     return size_read;
 }
 
@@ -295,9 +297,9 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
                 } else { // im finished!
                     break;
                 }
+                curr_page_no++;
             }
         }
-        curr_page_no++;
     }
     // made data_size = whatever I wrote
     *f_pos += size_written;
@@ -308,7 +310,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
 } 
 
 #define SET_NPROC_OP 1
-#define TEM_SET_NPROC _IOW(MYIOC_TYPE, SET_NPROC_OP, sizeof(int)) 
+#define TEM_SET_NPROC _IOW(MYIOC_TYPE, SET_NPROC_OP, int) 
 
 /**
  * The ioctl function, which nothing needs to be done in this case.
@@ -324,13 +326,11 @@ long asgn1_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
         return -EINVAL;
     }
 
-    // now check that command is actually for me, if it is set max_nprocs
-    // TODO find out why its not TEM_SET_NPROC
-    if (cmd == SET_NPROC_OP) {
-        nr = (int)arg;
-        new_nprocs = nr + atomic_read(&asgn1_device.nprocs);
+    nr = _IOC_NR(cmd);
+    if (nr == TEM_SET_NPROC) {
+        new_nprocs = arg;
         
-        if (new_nprocs > atomic_read(&asgn1_device.max_nprocs) + nr) {
+        if (new_nprocs < atomic_read(&asgn1_device.nprocs) ) {
             printk(KERN_ERR "Cannot set maximum number of processes to %d because too many processes are currently accessing this device.\n", new_nprocs);
             result = -1;
         } else {
@@ -353,7 +353,7 @@ int asgn1_read_procmem(char *buf, char **start, off_t offset, int count,
     int result;
 
     // need to write count + 1 bytes because need extra 1 for nul
-    result = snprintf(buf + offset, count + 1, "Reading from /proc/%s\n", MYDEV_NAME);  
+    result = snprintf(buf + offset, count + 1, "Character device dreiver: %s\n", MYDEV_NAME);  
 
     if (result <= offset + count) {
         *eof = 1;
