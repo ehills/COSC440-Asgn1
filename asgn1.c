@@ -167,17 +167,14 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
                 begin_offset += curr_size_read;
             } while(size_to_be_read > 0);
             if (size_read == count) { // then im done!
-                printk(KERN_INFO "Read %d bytes\n", size_read);
-                return 0; // TODO - successfully reads everything correctly but wont print to stdout.
-                          // TODO - if i return size_read instead it then infinitely prints out the
-                          // TODO - text to stdout because cat is repetitively calling read because I
-                          // TODO - have returned non-zero so thinks it needs to read more
-                          // TODO - why does it print nothing when I return 0?
+                break;
             }
             begin_offset = 0;
-            curr_page_no++;
         }
+        curr_page_no++;
     }
+    printk(KERN_INFO "Read %d bytes\n", (int)size_read);
+    *f_pos += size_read;
     return size_read;
 }
 
@@ -257,7 +254,6 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
         }
         INIT_LIST_HEAD(&(curr->list));
         list_add_tail(&(curr->list), &(asgn1_device.mem_list));
-        curr_page_no++;
         asgn1_device.num_pages++;
     }
 
@@ -295,14 +291,13 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
                     }
                     INIT_LIST_HEAD(&(curr->list));
                     list_add_tail(&(curr->list), &(asgn1_device.mem_list));
-                    curr_page_no++;
                     asgn1_device.num_pages++;
                 } else { // im finished!
-                    printk(KERN_INFO "Wrote %d bytes\n", (int)size_written);
-                    return count;
+                    break;
                 }
             }
         }
+        curr_page_no++;
     }
     // made data_size = whatever I wrote
     *f_pos += size_written;
