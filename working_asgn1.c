@@ -74,7 +74,6 @@ void free_memory_pages(void) {
     page_node *curr;
     page_node *temp;
 
-    // free all the pages then delete page_nodes 
     list_for_each_entry_safe(curr, temp, &(asgn1_device.mem_list), list) {
         if (curr->page != NULL) {
             __free_page(curr->page);
@@ -94,15 +93,12 @@ void free_memory_pages(void) {
  */
 int asgn1_open(struct inode *inode, struct file *filp) {
 
-    // check there arent too many proccesses already
     if (atomic_read(&asgn1_device.nprocs) >= atomic_read(&asgn1_device.max_nprocs)) {
         printk(KERN_ERR "(exit): Too many processes are accessing this device\n");
         return -EBUSY;
     }
-    // we're good so increment number of devices
     atomic_inc(&asgn1_device.nprocs);
 
-    // if opened in write only free everything we ahd previously
     if ((filp->f_flags & O_ACCMODE) == O_WRONLY) {
         free_memory_pages();
     }
@@ -119,7 +115,6 @@ int asgn1_open(struct inode *inode, struct file *filp) {
  */
 int asgn1_release (struct inode *inode, struct file *filp) {
 
-    // decrement number of processes accessing device
     atomic_dec(&asgn1_device.nprocs);
     printk(KERN_INFO " closing character device: %s\n\n", MYDEV_NAME);
     return 0;
@@ -149,24 +144,26 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
         printk(KERN_ERR "Reached end of the device on a read");
         return 0;
     }
-
+        
     begin_offset = *f_pos % PAGE_SIZE;
     list_for_each_entry(curr, ptr, list) {
-
+       
         if (begin_page_no <= curr_page_no) {
             do { // read data from the page 
 
                 // check if i need to read a whole page or less than a page
                 if (count <= asgn1_device.data_size) { 
                     size_to_be_read = min(((int)PAGE_SIZE - begin_offset), (count - size_read));
-                    // looks like they told me to read more than i have, better change that.
+                // looks like they told me to read more than i have, better change that.
                 } else {
                     count = asgn1_device.data_size;
                     size_to_be_read = min(((int)PAGE_SIZE - begin_offset), (count - size_read));
                 }
+                printk(KERN_ERR "Going to read %d out of %d", (int)size_to_be_read, (int)count);
                 // now lets read!
                 curr_size_read = size_to_be_read - copy_to_user(buf + size_read,
-                        page_address(curr->page) + begin_offset, size_to_be_read);
+                                    page_address(curr->page) + begin_offset, size_to_be_read);
+                printk(KERN_ERR "Just read %d out of %d", (int)curr_size_read, (int)size_to_be_read);
                 size_read += curr_size_read;
                 size_to_be_read -= curr_size_read;
                 begin_offset += curr_size_read;
@@ -237,7 +234,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
     size_t size_to_be_written;  /* size to be read in the current round in 
                                    while loop */
 
-    struct list_head *ptr = asgn1_device.mem_list.next;
+    struct list_head *ptr = &asgn1_device.mem_list;
     page_node *curr;
 
     // check they didnt tell me to start where i dont have
@@ -246,52 +243,65 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
         return 0;
     }
 
-    begin_offset = *f_pos / PAGE_SIZE;
-
-    while (count > size_written) {
-
-        curr = list_entry(ptr, page_node, list);
-        if (ptr == &(asgn1_device.mem_list)) {
-            // ive run out of pages so better get a new one!
-
-            if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
-                printk(KERN_ERR "Not enough memory left\n");
-                return -ENOMEM;
-            }
-
-            if ((curr->page = alloc_page(GFP_KERNEL)) == NULL) {
-                printk(KERN_ERR "Not enough memory left\n");
-                return -ENOMEM;
-            }
-            INIT_LIST_HEAD(&(curr->list));
-            list_add_tail(&(curr->list), &(asgn1_device.mem_list));
-            asgn1_device.num_pages++;
-            ptr = asgn1_device.mem_list.prev;
-        } else if (curr_page_no < begin_page_no) {
-            // not there yet so lets increment and move on 
-            curr_page_no++;
-            ptr = ptr->next;
-
-        } else {
-
-            do {
-                // write to the page
-                size_to_be_written = min(((int)PAGE_SIZE - begin_offset), (count - size_written));
-                curr_size_written = size_to_be_written - copy_from_user(page_address(curr->page) 
-                        + begin_offset, buf + size_written, size_to_be_written);
-                size_written += curr_size_written;
-                size_to_be_written -= curr_size_written;
-                begin_offset += curr_size_written;
-                asgn1_device.data_size += curr_size_written;
-
-                // finished writing so now update page and ptr and move on
-            } while (curr_size_written < size_to_be_written);
-            begin_offset = 0;
-            curr_page_no++;
-            ptr = ptr->next;
+    // better add a page if there are none!
+    if (ptr == ptr->next) {
+        if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
+            printk(KERN_ERR "Not enough memory left\n");
+            return -ENOMEM;
         }
+        
+        if ((curr->page = alloc_page(GFP_KERNEL)) == NULL) {
+            printk(KERN_ERR "Not enough memory left\n");
+            return -ENOMEM;
+        }
+        INIT_LIST_HEAD(&(curr->list));
+        list_add_tail(&(curr->list), &(asgn1_device.mem_list));
+        asgn1_device.num_pages++;
     }
 
+    list_for_each_entry(curr, ptr, list) {
+        
+        if (begin_page_no <= curr_page_no) {
+            begin_offset = 0;
+
+            while (size_written < count) {
+                do { // write to the page till its full or we've finished writing
+                    
+                    size_to_be_written = min(((int)PAGE_SIZE - begin_offset),
+                                                        (count - size_written));
+                    curr_size_written = size_to_be_written - 
+                            copy_from_user(page_address(curr->page) + begin_offset, 
+                                            buf + size_written, size_to_be_written);
+                    size_written += curr_size_written;
+                    size_to_be_written -= curr_size_written;
+                    begin_offset += curr_size_written;
+                    asgn1_device.data_size += curr_size_written;
+
+                } while (size_to_be_written > 0);
+                begin_offset = 0;
+
+                // if still left to write better add a new page
+                if (size_written < count) {
+                    if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
+                        printk(KERN_ERR "Not enough memory left\n");
+                        return -ENOMEM;
+                    }
+
+                    if ((curr->page = alloc_page(GFP_KERNEL)) == NULL) {
+                        printk(KERN_ERR "Not enough memory left\n");
+                        return -ENOMEM;
+                    }
+                    INIT_LIST_HEAD(&(curr->list));
+                    list_add_tail(&(curr->list), &(asgn1_device.mem_list));
+                    asgn1_device.num_pages++;
+                } else { // im finished!
+                    break;
+                }
+                curr_page_no++;
+            }
+        }
+    }
+    // made data_size = whatever I wrote
     *f_pos += size_written;
     asgn1_device.data_size = max(asgn1_device.data_size,
             orig_f_pos + size_written);
@@ -316,12 +326,10 @@ long asgn1_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
         return -EINVAL;
     }
 
-    // get the actual command and then check its to set maxprocs
     nr = _IOC_NR(cmd);
     if (nr == TEM_SET_NPROC) {
         new_nprocs = arg;
         
-        // make sure im not lowering maxprocs when more processes are accessing this device
         if (new_nprocs < atomic_read(&asgn1_device.nprocs) ) {
             printk(KERN_ERR "Cannot set maximum number of processes to %d because too many processes are currently accessing this device.\n", new_nprocs);
             result = -1;
@@ -344,13 +352,9 @@ int asgn1_read_procmem(char *buf, char **start, off_t offset, int count,
         int *eof, void *data) {
     int result;
 
-    // write data about this device to proc
+    // need to write count + 1 bytes because need extra 1 for nul
     result = snprintf(buf + offset, count + 1, "Character device driver: %s\n", MYDEV_NAME);  
-    result += snprintf(buf + offset + result, count + 1, "Number of pages used: %d\n", (int)asgn1_device.num_pages);  
-    result += snprintf(buf + offset + result, count + 1, "Size of this device: %d\n", (int)asgn1_device.data_size);  
-    result += snprintf(buf + offset + result, count + 1, "Number of processess accessing this device: %d\n", (int)atomic_read(&asgn1_device.nprocs));  
 
-    // set eof so we know we are done writing
     if (result <= offset + count) {
         *eof = 1;
     }
@@ -392,12 +396,12 @@ static int asgn1_mmap (struct file *filp, struct vm_area_struct *vma)
     while (len > 0) {
 
         list_for_each_entry(curr, ptr, list) {
-          //  pfn = _virt_to_pfn(offset); // STILL DONT HAVE IT FFS **/
+       /**     pfn = virt_to_pfn(offset); ** STILL DONT HAVE IT FFS **/
 
             if (page_to_pfn(curr->page) == pfn) {
 
                 remap_pfn_range(vma, vma->vm_start + offset,
-                        pfn + (PAGE_SIZE * index), len, vma->vm_page_prot);
+                                pfn + (PAGE_SIZE * index), len, vma->vm_page_prot);
                 index++;
                 len -= PAGE_SIZE;
                 offset += PAGE_SIZE;
@@ -441,11 +445,11 @@ int __init asgn1_init_module(void){
     if (asgn1_major) {
         // try register given major number
         result = register_chrdev_region(asgn1_device.dev, asgn1_dev_count, "Eds_char_device");
-
+        
         if (result < 0) {
             // uh oh didnt work better get system to allocate it
             printk(KERN_WARNING "Can't use the major number %d; trying automatic allocation..\n", asgn1_major);
-
+            
             // check if system can give me a number or die
             if ((result = alloc_chrdev_region(&asgn1_device.dev, asgn1_major, asgn1_dev_count, MYDEV_NAME)) < 0) {
                 printk(KERN_ERR "Failed to allocate character device region\n");
@@ -462,14 +466,14 @@ int __init asgn1_init_module(void){
         }
         asgn1_major = MAJOR(asgn1_device.dev);
     }
-
+    
     // allocate cdev
     if (!(asgn1_device.cdev = cdev_alloc())) {
         printk(KERN_ERR "cdev_alloc() failed.\n");
         unregister_chrdev_region(asgn1_device.dev, asgn1_dev_count);
         return -1;
     }
-
+    
     // init cdev
     cdev_init(asgn1_device.cdev, &asgn1_fops);
     asgn1_device.cdev->owner = THIS_MODULE;
@@ -485,7 +489,7 @@ int __init asgn1_init_module(void){
     // initiliase page list
     INIT_LIST_HEAD(&(asgn1_device.mem_list));
 
-    // initialise proc 
+    // 
     if (create_proc_read_entry(MYDEV_NAME, S_IRUSR | S_IRGRP | S_IROTH, NULL, asgn1_read_procmem, NULL) == NULL) {
         printk(KERN_ERR "Error: Could not initialize /proc/%s/\n", MYDEV_NAME);
         result = -ENOMEM;
@@ -513,7 +517,7 @@ int __init asgn1_init_module(void){
     printk(KERN_WARNING "Hello world from %s\n", MYDEV_NAME);
     return 0;
 
-    // cleanup if class init fails
+// cleanup if class init fails
 fail_class:
     remove_proc_entry(MYDEV_NAME, NULL);
     list_del_init(&asgn1_device.mem_list);
@@ -522,7 +526,7 @@ fail_class:
 
     return result;
 
-    // cleanup if device init fails
+// cleanup if device init fails
 fail_device:
     class_destroy(asgn1_device.class);
     goto fail_class;
@@ -532,17 +536,16 @@ fail_device:
  * Finalise the module
  */
 void __exit asgn1_exit_module(void){
-    // free and destroy things set up in reverse order
     device_destroy(asgn1_device.class, asgn1_device.dev);
     class_destroy(asgn1_device.class);
     remove_proc_entry(MYDEV_NAME, NULL);
     printk(KERN_WARNING "cleaned up udev entry\n");
-
+   
     free_memory_pages();
     list_del_init(&asgn1_device.mem_list);
     cdev_del(asgn1_device.cdev);
     unregister_chrdev_region(asgn1_device.dev, asgn1_dev_count);
-
+    
     printk(KERN_WARNING "Good bye from %s\n", MYDEV_NAME);
 }
 
