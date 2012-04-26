@@ -318,7 +318,7 @@ long asgn1_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
 
     // get the actual command and then check its to set maxprocs
     nr = _IOC_NR(cmd);
-    if (nr == TEM_SET_NPROC) {
+    if (nr == SET_NPROC_OP) {
         new_nprocs = arg;
         
         // make sure im not lowering maxprocs when more processes are accessing this device
@@ -332,6 +332,7 @@ long asgn1_ioctl (struct file *filp, unsigned int cmd, unsigned long arg) {
         return result;
     }
 
+    printk(KERN_WARNING "Invalid comand nr=%d, for this type.\n", nr);
     return -ENOTTY;
 }
 
@@ -383,25 +384,21 @@ static int asgn1_mmap (struct file *filp, struct vm_area_struct *vma)
     } else if (len % PAGE_SIZE != 0) {
         printk(KERN_ERR "Length must be on a multiple of page_size.\n");
         return -EAGAIN;
-    } else if (len + offset >= ramdisk_size) {
+    } else if (len + offset > ramdisk_size) {
         printk(KERN_ERR "You are trying to write past the ramdisk\n");
         return -EAGAIN;
     }
 
-
     while (len > 0) {
 
         list_for_each_entry(curr, ptr, list) {
-          //  pfn = _virt_to_pfn(offset); // STILL DONT HAVE IT FFS **/
 
-            if (page_to_pfn(curr->page) == pfn) {
+            pfn = page_to_pfn(curr->page); 
 
-                remap_pfn_range(vma, vma->vm_start + offset,
-                        pfn + (PAGE_SIZE * index), len, vma->vm_page_prot);
-                index++;
-                len -= PAGE_SIZE;
-                offset += PAGE_SIZE;
-            }
+            remap_pfn_range(vma, vma->vm_start + (index * PAGE_SIZE),
+                    pfn, PAGE_SIZE, vma->vm_page_prot);
+            len -= PAGE_SIZE;
+            index++;
         }
     }
 

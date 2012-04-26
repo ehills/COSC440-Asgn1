@@ -14,6 +14,8 @@
 #define SET_NPROC_OP 1
 #define ASGN1_SET_NPROC _IOW(MYIOC_TYPE, SET_NPROC_OP, sizeof(int)) 
 
+
+
 ssize_t my_fread(int fildes, void *buf, size_t nbyte) {
     ssize_t read_size;
     ssize_t to_read_size = nbyte;
@@ -119,7 +121,7 @@ int main (int argc, char **argv)
 #endif
 
     assert(read_buf = malloc(SIZE));
-
+#if 0
     mmap_buf = mmap (NULL, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (mmap_buf == (char *)MAP_FAILED) {
         fprintf (stderr, "mmap of %s failed:  %s\n", filename,
@@ -127,12 +129,12 @@ int main (int argc, char **argv)
         exit (1);
     }
     printf ("mmap succeeded:  %p\n", mmap_buf);
-
+#endif
     (void)lseek (fd, 0, SEEK_SET);
-    read_and_compare (fd, buf, mmap_buf, SIZE);
-    printf ("comparison of same data via read() and mmap() successful\n");
+    read_and_compare (fd, read_buf, buf, SIZE);
+    printf ("lseek SEEK_SET and comparison of same data via read() and mmap() successful\n");
 
-
+#if 0
     /* Change one randomly chosen byte in the mmap region */
 
     j = random () % SIZE;
@@ -141,11 +143,12 @@ int main (int argc, char **argv)
 
     /*  repeat the read-back comparison. */
     (void)lseek (fd, 0, SEEK_SET);
-    read_and_compare (fd, read_buf, mmap_buf, SIZE);
-    printf ("comparison of modified data via read() and mmap() successful\n");
+    read_and_compare (fd, read_buf, buf, SIZE);
+    printf ("lseek SEEK_SET and comparison of modified data via read() and write() successful\n");
 
 
     (void)lseek (fd, 0, SEEK_SET);
+#endif
 
     if (ioctl (fd, ASGN1_SET_NPROC, &nproc) < 0) {
         fprintf (stderr, "ioctl failed:  %s\n", strerror (errno));
