@@ -99,16 +99,17 @@ int asgn1_open(struct inode *inode, struct file *filp) {
         printk(KERN_ERR "(exit): Too many processes are accessing this device\n");
         return -EBUSY;
     }
+    // we're good so increment number of devices
     atomic_inc(&asgn1_device.nprocs);
 
-    // if opened in write only free everything we had previously
+    // if opened in write only free everything we ahd previously
     if ((filp->f_flags & O_ACCMODE) == O_WRONLY) {
         free_memory_pages();
     }
     printk(KERN_INFO " attempting to open device: %s\n", MYDEV_NAME);
     printk(KERN_INFO " MAJOR number = %d, MINOR number = %d\n",
             imajor(inode), iminor(inode));
-    return 0;
+    return 0; /* success */
 }
 
 
@@ -118,6 +119,7 @@ int asgn1_open(struct inode *inode, struct file *filp) {
  */
 int asgn1_release (struct inode *inode, struct file *filp) {
 
+    // decrement number of processes accessing device
     atomic_dec(&asgn1_device.nprocs);
     printk(KERN_INFO " closing character device: %s\n\n", MYDEV_NAME);
     return 0;
@@ -142,6 +144,7 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     struct list_head *ptr = &asgn1_device.mem_list;
     page_node *curr;
 
+    // check they didnt tell me to start past my data
     if (*f_pos >= asgn1_device.data_size) {
         printk(KERN_ERR "Reached end of the device on a read");
         return 0;
@@ -151,14 +154,17 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
     list_for_each_entry(curr, ptr, list) {
 
         if (begin_page_no <= curr_page_no) {
-            do {
+            do { // read data from the page 
 
+                // check if i need to read a whole page or less than a page
                 if (count <= asgn1_device.data_size) { 
                     size_to_be_read = min(((int)PAGE_SIZE - begin_offset), (count - size_read));
+                    // looks like they told me to read more than i have, better change that.
                 } else {
                     count = asgn1_device.data_size;
                     size_to_be_read = min(((int)PAGE_SIZE - begin_offset), (count - size_read));
                 }
+                // now lets read!
                 curr_size_read = size_to_be_read - copy_to_user(buf + size_read,
                         page_address(curr->page) + begin_offset, size_to_be_read);
                 size_read += curr_size_read;
@@ -166,7 +172,7 @@ ssize_t asgn1_read(struct file *filp, char __user *buf, size_t count,
                 begin_offset += curr_size_read;
             } while(size_to_be_read > 0);
             begin_offset = 0;
-            if (size_read == count) {
+            if (size_read == count) { // then im done!
                 break;
             }
         }
@@ -262,6 +268,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
             asgn1_device.num_pages++;
             ptr = asgn1_device.mem_list.prev;
         } else if (curr_page_no < begin_page_no) {
+            // not there yet so lets increment and move on 
             curr_page_no++;
             ptr = ptr->next;
 
@@ -362,10 +369,7 @@ int asgn1_read_procmem(char *buf, char **start, off_t offset, int count,
     return result;
 }
 
-/*
- * mmap function will map memory between the user and kernel boundary so both
- * parties are able to access the memory.
- */
+
 static int asgn1_mmap (struct file *filp, struct vm_area_struct *vma)
 {
     unsigned long pfn;
@@ -374,6 +378,7 @@ static int asgn1_mmap (struct file *filp, struct vm_area_struct *vma)
     unsigned long ramdisk_size = asgn1_device.num_pages * PAGE_SIZE;
     page_node *curr;
     unsigned long index = 0;
+    struct list_head *ptr = asgn1_device.mem_list.next;
     unsigned long count = 0;
 
     if (offset % PAGE_SIZE != 0 || offset > ramdisk_size) {
@@ -387,7 +392,7 @@ static int asgn1_mmap (struct file *filp, struct vm_area_struct *vma)
         return -EAGAIN;
     }
 
-        list_for_each_entry(curr, &asgn1_device.mem_list, list) {
+        list_for_each_entry(curr, ptr, list) {
 
             if (index >= vma->vm_pgoff) {
 
@@ -398,12 +403,16 @@ static int asgn1_mmap (struct file *filp, struct vm_area_struct *vma)
 
                 count++;
 
+                printk(KERN_ERR "Length: %ld - size of written: %ld\n", len, PAGE_SIZE * count);
+
                 if (len <= PAGE_SIZE * count) {
+                    printk(KERN_ERR "Done :)\n");
                     return 0;
                 }
             }
             index++;
         }
+    printk(KERN_ERR "Got to end of list\n");
 
     return 0;
 }

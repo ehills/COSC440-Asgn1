@@ -62,7 +62,6 @@ ssize_t my_fwrite(int fildes, const void *buf, size_t nbyte) {
     return nbyte;
 }
 
-
 void read_and_compare (int fd, char *read_buf, char *mmap_buf,
                        unsigned long len)
 {
