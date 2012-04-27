@@ -1,4 +1,5 @@
 MODULE_NAME = asgn1
+EXTRA_CFLAGS += -Werror
 
 
 obj-m   := $(MODULE_NAME).o
@@ -6,6 +7,8 @@ obj-m   := $(MODULE_NAME).o
 
 KDIR    := /lib/modules/$(shell uname -r)/build
 PWD     := $(shell pwd)
+
+
 
 all: module mmap_test
 

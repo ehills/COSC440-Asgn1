@@ -36,7 +36,6 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Edward Hills");
 MODULE_DESCRIPTION("COSC440 asgn1");
 
-
 /**
  * The node structure for the memory page linked list.
  */ 
@@ -80,7 +79,7 @@ void free_memory_pages(void) {
             __free_page(curr->page);
         }
         list_del(&(curr->list));
-        kfree(curr);
+        kmem_cache_free(asgn1_device.cache, curr);
     }
 
     asgn1_device.num_pages = 0;
@@ -248,7 +247,7 @@ ssize_t asgn1_write(struct file *filp, const char __user *buf, size_t count,
         if (ptr == &(asgn1_device.mem_list)) {
             // ive run out of pages so better get a new one!
 
-            if ((curr = kmalloc(sizeof(page_node), GFP_KERNEL)) == NULL) {
+            if ((curr = kmem_cache_alloc(asgn1_device.cache, GFP_KERNEL)) == NULL) {
                 printk(KERN_ERR "Not enough memory left\n");
                 return -ENOMEM;
             }
@@ -479,6 +478,9 @@ int __init asgn1_init_module(void){
     // initiliase page list
     INIT_LIST_HEAD(&(asgn1_device.mem_list));
 
+    // setup kmem cache
+    asgn1_device.cache = kmem_cache_create("asgn1_cache", sizeof(page_node), 0, 0, NULL);
+
     // initialise proc 
     if (create_proc_read_entry(MYDEV_NAME, S_IRUSR | S_IRGRP | S_IROTH, NULL, asgn1_read_procmem, NULL) == NULL) {
         printk(KERN_ERR "Error: Could not initialize /proc/%s/\n", MYDEV_NAME);
@@ -511,6 +513,7 @@ int __init asgn1_init_module(void){
 fail_class:
     remove_proc_entry(MYDEV_NAME, NULL);
     list_del_init(&asgn1_device.mem_list);
+    kmem_cache_destroy(asgn1_device.cache);
     cdev_del(asgn1_device.cdev);
     unregister_chrdev_region(asgn1_device.dev, asgn1_dev_count);
 
@@ -534,6 +537,7 @@ void __exit asgn1_exit_module(void){
 
     free_memory_pages();
     list_del_init(&asgn1_device.mem_list);
+    kmem_cache_destroy(asgn1_device.cache);
     cdev_del(asgn1_device.cdev);
     unregister_chrdev_region(asgn1_device.dev, asgn1_dev_count);
 
