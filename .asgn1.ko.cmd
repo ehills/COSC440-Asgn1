@@ -1,1 +1,0 @@
-cmd_/home/ehills/COSC440/asgn1/asgn1.ko := ld -r -m elf_i386 -T /usr/src/linux-headers-2.6.32-40-generic-pae/scripts/module-common.lds --build-id -o /home/ehills/COSC440/asgn1/asgn1.ko /home/ehills/COSC440/asgn1/asgn1.o /home/ehills/COSC440/asgn1/asgn1.mod.o
