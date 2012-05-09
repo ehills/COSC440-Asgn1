@@ -1,7 +1,5 @@
-Git repo for my first assignment for COSC480
-
-I am building a basic character device driver that will be able to be read and written to
+Basic character device driver that will be able to be read and write to an unlimited (until you run out of memory) amount of pages. This can perform memory mapping also. You can lseek the device and there is an ioctl command to change the maximum number of processes that can access this device.
 
 Created by Edward Hills
 
-Updated: 23/03/2012
+Updated: 09/04/2012
